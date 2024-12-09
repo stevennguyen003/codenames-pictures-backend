@@ -19,15 +19,51 @@ const io = new SocketIOServer(server, {
     }
   });
 
+let users = []
+const gameRooms = {};
+
 io.on('connection', (socket) => {
     console.log('a user connected');
 
-    // Emit a custom 'user connected' event to the client
-    socket.emit('user connected');
+    // User provides nickname when joining the server
+    socket.on("join server", (nickname) => {
+      const user = {
+        nickname,
+        id: socket.id,
+      };
+      users.push(user);
+      io.emit("new user", users);
+    })
 
-    socket.on('disconnect', () => {
-        console.log('A user disconnected');
-    });
+    // User joining or creating a room
+    socket.on("join room", (roomName, nickname, cb) => {
+
+      socket.join(roomName);
+
+      // Creates room if no room round
+      if (!gameRooms[roomName]) {
+        gameRooms[roomName] = {
+          users: [],
+          gameLog: [],
+        };
+      }
+
+      // Add the user to the room
+      gameRooms[roomName].users.push({nickname, id: socket.id });
+      // Allow user to see previous game log history if exists
+      cb(gameRooms[roomName].gameLog, {
+        success: true,
+        users: gameRooms[roomName].users
+      });
+
+      // Notify the room that a new user has joined
+      io.to(roomName).emit("user joined", {
+        nickname,
+        users: gameRooms[roomName].users,
+      });
+
+      console.log(`${nickname} joined room ${roomName}`);
+    })
 });
 
 Hello(app);
