@@ -85,53 +85,51 @@ io.on('connection', (socket) => {
 
     // User choosing a role on a team
     socket.on("select role", (roomName, nickname, teamColor, roleType, cb) => {
-      
       const room = gameRooms[roomName];
       if (!room) {
         return cb({ success: false, error: "Room does not exist" });
       }
-
+    
       // Remove user from spectators
       room.spectators = room.spectators.filter(user => user.id !== socket.id);
-
+    
+      // Remove the user from existing teams first
+      room.teamRed = room.teamRed.filter(user => user.id !== socket.id);
+      room.teamBlue = room.teamBlue.filter(user => user.id !== socket.id);
+    
       // Determine the correct team array
       const teamArray = teamColor === 'red' ? room.teamRed : room.teamBlue;
-
-      // Remove user from any existing roles in this team
-      const filteredTeam = teamArray.filter(user => user.id !== socket.id);
-
+    
       // Check if existing spymaster
-      if (roleType === 'spymaster') {
-        const existingSpymaster = filteredTeam.find(user => user.role === 'spymaster');
-        if (existingSpymaster) {
-          return cb({
-            success: false,
-            error: `${teamColor} team already has a spymaster`
-          });
-        }
+      const existingSpymaster = teamArray.find(user => user.role === 'spymaster');
+      if (roleType === 'spymaster' && existingSpymaster) {
+        return cb({
+          success: false,
+          error: `${teamColor} team already has a spymaster`
+        });
       }
-
+    
       // Create new team member with selected role
       const teamMember = {
         nickname,
         id: socket.id,
-        role: roleType  // 'operator' or 'spymaster'
+        role: roleType
       };
-
+    
       // Add to team
       if (teamColor === 'red') {
-        room.teamRed = [...filteredTeam, teamMember];
+        room.teamRed = [...room.teamRed, teamMember];
       } else {
-        room.teamBlue = [...filteredTeam, teamMember];
+        room.teamBlue = [...room.teamBlue, teamMember];
       }
-
+    
       // Broadcast updated team information to the room
       io.to(roomName).emit("team updated", {
         spectators: room.spectators,
         teamRed: room.teamRed,
         teamBlue: room.teamBlue
       });
-
+    
       cb({
         success: true,
         spectators: room.spectators,
