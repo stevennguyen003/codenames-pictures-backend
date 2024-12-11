@@ -1,3 +1,5 @@
+import { generateGameGrid } from "./gridControllerjs";
+
 let users = [];
 const gameRooms = {};
 
@@ -46,8 +48,8 @@ const socketEvents = (io) => {
 
             // Check if user already exists in the room
             const existingUserInRoom = [
-                ...room.teamRed, 
-                ...room.teamBlue, 
+                ...room.teamRed,
+                ...room.teamBlue,
                 ...room.spectators
             ].find(user => user.nickname === nickname);
 
@@ -145,6 +147,63 @@ const socketEvents = (io) => {
                     teamRed: room.teamRed,
                     teamBlue: room.teamBlue
                 });
+            });
+        });
+
+        // Add start game event handler
+        socket.on("start game", (roomName, cb) => {
+            const room = gameRooms[roomName];
+            if (!room) {
+                return cb({ success: false, error: "Room does not exist" });
+            }
+
+            // Validate team compositions
+            const redSpymasters = room.teamRed.filter(member => member.role === 'spymaster');
+            const redOperators = room.teamRed.filter(member => member.role === 'operator');
+            const blueSpymasters = room.teamBlue.filter(member => member.role === 'spymaster');
+            const blueOperators = room.teamBlue.filter(member => member.role === 'operator');
+
+            if (
+                redSpymasters.length < 1 ||
+                redOperators.length < 1 ||
+                blueSpymasters.length < 1 ||
+                blueOperators.length < 1
+            ) {
+                return cb({
+                    success: false,
+                    error: "Each team must have at least one spymaster and one operator"
+                });
+            }
+
+            // Generate game grid
+            const gameGrid = generateGameGrid();
+
+            // Update room with game state
+            room.gameStarted = true;
+            room.gameGrid = gameGrid;
+            room.currentTurn = Math.random() < 0.5 ? 'red' : 'blue'; // Randomly choose starting team
+
+            // Broadcast game start to room
+            io.to(roomName).emit("game started", {
+                success: true,
+                gameGrid: gameGrid,
+                currentTurn: room.currentTurn,
+                teamRed: room.teamRed,
+                teamBlue: room.teamBlue
+            });
+
+            // Optional: Add to game log
+            room.gameLog.push({
+                type: 'game_start',
+                timestamp: new Date(),
+                startingTeam: room.currentTurn
+            });
+
+            // Callback for additional client-side handling if needed
+            cb({
+                success: true,
+                gameGrid: gameGrid,
+                currentTurn: room.currentTurn
             });
         });
     });
