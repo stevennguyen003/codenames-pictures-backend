@@ -1,4 +1,4 @@
-import { generateGameGrid } from "./gridControllerjs";
+import { generateGameGrid } from "../GridController/gridController.js";
 
 let users = [];
 const gameRooms = {};

@@ -1,7 +1,7 @@
 import express from "express";
 import cors from "cors";
 import { Server as SocketIOServer } from "socket.io";
-import socketEvents from './socketEvents.js';
+import socketEvents from './SocketEvents/socketEvents.js';
 
 const app = express();
 const port = 4000;
