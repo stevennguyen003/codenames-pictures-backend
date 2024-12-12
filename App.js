@@ -1,29 +1,63 @@
+import "dotenv/config";
 import express from "express";
 import cors from "cors";
+import { createClient } from 'redis';
+import session from 'express-session';
+import { RedisStore } from "connect-redis";
 import { Server as SocketIOServer } from "socket.io";
 import socketEvents from './SocketEvents/socketEvents.js';
 
 const app = express();
-const port = 4000;
-const server = app.listen(process.env.PORT || port);
+const port = process.env.PORT || 4000;
 
+// Redis Client
+const redisClient = createClient({
+  url: process.env.REDIS_URL || 'redis://localhost:6379'
+});
+
+redisClient.on('error', (err) => console.log('Redis Client Error', err));
+
+// Connect Redis Client
+await redisClient.connect();
+
+// Redis Session Store
+const redisStore = new RedisStore({
+  client: redisClient,
+  prefix: 'codenames_session:',
+});
+
+// Middleware Setup
 app.use(cors({
   credentials: true,
   origin: ["http://localhost:3000"]
 }));
 
+// Session Middleware
+app.use(session({
+  store: redisStore,
+  secret: process.env.SESSION_SECRET,
+  resave: false,
+  saveUninitialized: false,
+  cookie: {
+    secure: process.env.NODE_ENV === 'production',
+    httpOnly: true,
+    maxAge: 1000 * 60 * 60 * 24 * 7 // 1 week
+  }
+}));
+
+// Create HTTP Server
+const server = app.listen(port);
+
+// Socket.IO Setup
 const io = new SocketIOServer(server, {
   cors: {
-    origin: "http://localhost:3000", // Allow requests from this origin
-    methods: ["GET", "POST"]
-  },
-  // pingInterval: 25000,   // Interval to send a ping (in ms)
-  // pingTimeout: 60000,    // Time before disconnect if no ping response (in ms)
-  // transports: ['websocket'], // Use WebSocket transport for better stability
+    origin: "http://localhost:3000",
+    methods: ["GET", "POST"],
+    credentials: true
+  }
 });
 
-
-// Initialize socket event handling
-socketEvents(io);
+// Initialize socket event handling with Redis
+socketEvents(io, redisClient);
 
 console.log(`Server running on port ${port}`);
