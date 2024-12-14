@@ -1,50 +1,135 @@
 import { generateGameGrid } from "../GridController/gridController.js";
+import { v4 as uuidv4 } from 'uuid';
 
-let users = [];
-const gameRooms = {};
+const socketEvents = (io, redisClient) => {
+    // Helper function to serialize room data
+    const serializeRoomData = (roomData) => {
+        return {
+            ...roomData,
+            users: JSON.stringify(roomData.users || []),
+            gameLog: JSON.stringify(roomData.gameLog || []),
+            teamRed: JSON.stringify(roomData.teamRed || []),
+            teamBlue: JSON.stringify(roomData.teamBlue || []),
+            spectators: JSON.stringify(roomData.spectators || []),
+            teamColors: JSON.stringify(roomData.teamColors || {
+                red: { limit: 5, spymaster: null },
+                blue: { limit: 5, spymaster: null }
+            }),
+            gameGrid: JSON.stringify(roomData.gameGrid || null),
+            gameStarted: roomData.gameStarted ? 'true' : 'false'
+        };
+    };
 
-const socketEvents = (io) => {
+    // Helper function to deserialize room data
+    const deserializeRoomData = (serializedData) => {
+        return {
+            ...serializedData,
+            users: JSON.parse(serializedData.users || '[]'),
+            gameLog: JSON.parse(serializedData.gameLog || '[]'),
+            teamRed: JSON.parse(serializedData.teamRed || '[]'),
+            teamBlue: JSON.parse(serializedData.teamBlue || '[]'),
+            spectators: JSON.parse(serializedData.spectators || '[]'),
+            teamColors: JSON.parse(serializedData.teamColors || JSON.stringify({
+                red: { limit: 5, spymaster: null },
+                blue: { limit: 5, spymaster: null }
+            })),
+            gameGrid: serializedData.gameGrid ? JSON.parse(serializedData.gameGrid) : null,
+            gameStarted: serializedData.gameStarted === 'true'
+        };
+    };
+
+    // Room key generator
+    const getRoomKey = (roomName) => `codenames:room:${roomName}`;
+
+    // Create or update room in Redis
+    const createOrUpdateRoom = async (roomName, roomData) => {
+        const roomKey = getRoomKey(roomName);
+        const serializedData = serializeRoomData(roomData);
+        
+        await redisClient.hSet(roomKey, serializedData);
+        // Set expiration to 7 days
+        await redisClient.expire(roomKey, 60 * 60 * 24 * 7);
+    };
+
+    // Retrieve room data from Redis
+    const getRoomData = async (roomName) => {
+        const roomKey = getRoomKey(roomName);
+        const roomData = await redisClient.hGetAll(roomKey);
+        
+        return roomData ? deserializeRoomData(roomData) : null;
+    };
+
     io.on('connection', (socket) => {
         console.log('a user connected');
 
-        // User provides nickname when joining the server
-        socket.on("join server", (nickname) => {
+        // Authenticate user session
+        socket.on("authenticate", async (sessionId, cb) => {
+            try {
+                const sessionData = await redisClient.get(`codenames:session:${sessionId}`);
+                
+                if (sessionData) {
+                    const parsedSession = JSON.parse(sessionData);
+                    cb({
+                        success: true,
+                        nickname: parsedSession.nickname,
+                        sessionId: sessionId
+                    });
+                } else {
+                    const newSessionId = uuidv4();
+                    cb({
+                        success: false,
+                        sessionId: newSessionId
+                    });
+                }
+            } catch (error) {
+                console.error('Authentication error:', error);
+                cb({ success: false, error: 'Authentication failed' });
+            }
+        });
+
+        // User joins server
+        socket.on("join server", async (nickname, sessionId) => {
+            // Store session in Redis
+            await redisClient.set(`codenames:session:${sessionId}`, JSON.stringify({
+                nickname,
+                createdAt: Date.now()
+            }), {
+                EX: 60 * 60 * 24 * 7 // 1 week expiration
+            });
+
             const user = {
                 nickname,
                 id: socket.id,
             };
+
+            socket.nickname = nickname;
+            socket.sessionId = sessionId;
+
             console.log(`${nickname} with id ${socket.id} joined server`);
-            users.push(user);
-            io.emit("new user", users);
         });
 
-        // User joining or creating a room
-        socket.on("join room", (roomName, nickname, cb) => {
+        // User joins room
+        socket.on("join room", async (roomName, nickname, cb) => {
             socket.join(roomName);
             console.log(`${nickname} with id ${socket.id} joined room ${roomName}`);
 
-            // Creates room if no room exists
-            if (!gameRooms[roomName]) {
-                gameRooms[roomName] = {
+            // Retrieve or create room data
+            let room = await getRoomData(roomName);
+            if (!room) {
+                room = {
                     users: [],
                     gameLog: [],
                     teamRed: [],
                     teamBlue: [],
                     spectators: [],
+                    gameStarted: false,
+                    gameGrid: null,
                     teamColors: {
-                        red: {
-                            limit: 5,
-                            spymaster: null
-                        },
-                        blue: {
-                            limit: 5,
-                            spymaster: null
-                        }
+                        red: { limit: 5, spymaster: null },
+                        blue: { limit: 5, spymaster: null }
                     }
                 };
             }
-
-            const room = gameRooms[roomName];
 
             // Check if user already exists in the room
             const existingUserInRoom = [
@@ -78,7 +163,10 @@ const socketEvents = (io) => {
                 room.spectators.push(newUser);
             }
 
-            // Allow user to see previous game log history if exists
+            // Update room in Redis
+            await createOrUpdateRoom(roomName, room);
+
+            // Callback with room information
             cb(room.gameLog, {
                 success: true,
                 users: room.users,
@@ -86,7 +174,10 @@ const socketEvents = (io) => {
                 teamRed: room.teamRed,
                 teamBlue: room.teamBlue,
                 existingUserRole,
-                existingMemberRole
+                existingMemberRole,
+                gameStarted: room.gameStarted,
+                gameGrid: room.gameStarted ? room.gameGrid : null,
+                currentTurn: room.currentTurn
             });
 
             // Notify the room that a new user has joined
@@ -95,64 +186,67 @@ const socketEvents = (io) => {
                 users: room.users,
                 spectators: room.spectators,
             });
+        });
 
-            console.log(`${nickname} rejoined room ${roomName}`);
+        // User selecting a role
+        socket.on("select role", async (roomName, nickname, teamColor, roleType, cb) => {
+            // Retrieve room data
+            let room = await getRoomData(roomName);
+            if (!room) {
+                return cb({ success: false, error: "Room does not exist" });
+            }
 
-            // User choosing a role on a team
-            socket.on("select role", (roomName, nickname, teamColor, roleType, cb) => {
-                const room = gameRooms[roomName];
-                if (!room) {
-                    return cb({ success: false, error: "Room does not exist" });
-                }
+            // Remove user from spectators and other teams
+            room.spectators = room.spectators.filter(user => user.nickname !== nickname);
+            room.teamRed = room.teamRed.filter(user => user.nickname !== nickname);
+            room.teamBlue = room.teamBlue.filter(user => user.nickname !== nickname);
 
-                // Remove user from spectators and other teams
-                room.spectators = room.spectators.filter(user => user.nickname !== nickname);
-                room.teamRed = room.teamRed.filter(user => user.nickname !== nickname);
-                room.teamBlue = room.teamBlue.filter(user => user.nickname !== nickname);
-
-                // Check if existing spymaster
-                const teamArray = teamColor === 'red' ? room.teamRed : room.teamBlue;
-                const existingSpymaster = teamArray.find(user => user.role === 'spymaster');
-                if (roleType === 'spymaster' && existingSpymaster) {
-                    return cb({
-                        success: false,
-                        error: `${teamColor} team already has a spymaster`
-                    });
-                }
-
-                // Create new team member with selected role
-                const teamMember = {
-                    nickname,
-                    id: socket.id,
-                    role: roleType
-                };
-
-                // Add to team
-                if (teamColor === 'red') {
-                    room.teamRed.push(teamMember);
-                } else {
-                    room.teamBlue.push(teamMember);
-                }
-
-                // Broadcast updated team information to the room
-                io.to(roomName).emit("team updated", {
-                    spectators: room.spectators,
-                    teamRed: room.teamRed,
-                    teamBlue: room.teamBlue
+            // Check if existing spymaster
+            const teamArray = teamColor === 'red' ? room.teamRed : room.teamBlue;
+            const existingSpymaster = teamArray.find(user => user.role === 'spymaster');
+            if (roleType === 'spymaster' && existingSpymaster) {
+                return cb({
+                    success: false,
+                    error: `${teamColor} team already has a spymaster`
                 });
+            }
 
-                cb({
-                    success: true,
-                    spectators: room.spectators,
-                    teamRed: room.teamRed,
-                    teamBlue: room.teamBlue
-                });
+            // Create new team member with selected role
+            const teamMember = {
+                nickname,
+                id: socket.id,
+                role: roleType
+            };
+
+            // Add to team
+            if (teamColor === 'red') {
+                room.teamRed.push(teamMember);
+            } else {
+                room.teamBlue.push(teamMember);
+            }
+
+            // Update room in Redis
+            await createOrUpdateRoom(roomName, room);
+
+            // Broadcast updated team information to the room
+            io.to(roomName).emit("team updated", {
+                spectators: room.spectators,
+                teamRed: room.teamRed,
+                teamBlue: room.teamBlue
+            });
+
+            cb({
+                success: true,
+                spectators: room.spectators,
+                teamRed: room.teamRed,
+                teamBlue: room.teamBlue
             });
         });
 
-        // Add start game event handler
-        socket.on("start game", (roomName, cb) => {
-            const room = gameRooms[roomName];
+        // Start game event
+        socket.on("start game", async (roomName, cb) => {
+            // Retrieve room data
+            let room = await getRoomData(roomName);
             if (!room) {
                 return cb({ success: false, error: "Room does not exist" });
             }
@@ -181,7 +275,17 @@ const socketEvents = (io) => {
             // Update room with game state
             room.gameStarted = true;
             room.gameGrid = gameGrid;
-            room.currentTurn = Math.random() < 0.5 ? 'red' : 'blue'; // Randomly choose starting team
+            room.currentTurn = Math.random() < 0.5 ? 'red' : 'blue';
+
+            // Add game start to game log
+            room.gameLog.push({
+                type: 'game_start',
+                timestamp: new Date(),
+                startingTeam: room.currentTurn
+            });
+
+            // Update room in Redis
+            await createOrUpdateRoom(roomName, room);
 
             // Broadcast game start to room
             io.to(roomName).emit("game started", {
@@ -192,19 +296,39 @@ const socketEvents = (io) => {
                 teamBlue: room.teamBlue
             });
 
-            // Optional: Add to game log
-            room.gameLog.push({
-                type: 'game_start',
-                timestamp: new Date(),
-                startingTeam: room.currentTurn
-            });
-
-            // Callback for additional client-side handling if needed
+            // Callback for additional client-side handling
             cb({
                 success: true,
                 gameGrid: gameGrid,
                 currentTurn: room.currentTurn
             });
+        });
+
+        // Resets game grid
+        socket.on("reset game", async (roomName, cb) => {
+            let room = await getRoomData(roomName);
+            if (!room) {
+                return cb({ success: false, error: "Room does not exist" });
+            }
+    
+            // Reset game state
+            room.gameStarted = false;
+            room.gameGrid = null;
+            room.currentTurn = null;
+            room.gameLog.push({
+                type: 'game_reset',
+                timestamp: new Date()
+            });
+    
+            // Update room in Redis
+            await createOrUpdateRoom(roomName, room);
+    
+            // Broadcast game reset to room
+            io.to(roomName).emit("game reset", {
+                success: true
+            });
+    
+            cb({ success: true });
         });
     });
 };
