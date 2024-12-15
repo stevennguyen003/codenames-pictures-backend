@@ -77,6 +77,7 @@ const socketEvents = (io, redisClient) => {
 
             // First time users get defaulted to spectator, need to update room
             if (!existingUserInRoom) {
+                room.users.push({ id: socket.id });
                 room.spectators.push({ nickname, id: socket.id, role: 'spectator' });
                 await createOrUpdateRoom(roomName, room);
             }
