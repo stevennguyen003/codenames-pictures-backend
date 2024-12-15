@@ -1,14 +1,3 @@
-// Helper function to generate 25 unique random numbers
-export const getRandomNumbers = (min, max, count) => {
-    const numbers = new Set();
-    while (numbers.size < count) {
-      const randomNumber = Math.floor(Math.random() * (max - min + 1)) + min;
-      numbers.add(randomNumber);
-    }
-    return Array.from(numbers);
-};
-
-// Function to generate game grid
 export const generateGameGrid = () => {
     // Generate 25 unique random card numbers
     const randomNumbers = getRandomNumbers(1, 279, 25);
@@ -32,5 +21,9 @@ export const generateGameGrid = () => {
         revealed: false
     }));
 
-    return gameGrid;
+    // Calculate initial points
+    const teamRedPoints = shuffledTypes.filter(type => type === 'red').length;
+    const teamBluePoints = shuffledTypes.filter(type => type === 'blue').length;
+
+    return { gameGrid, teamRedPoints, teamBluePoints };
 };
