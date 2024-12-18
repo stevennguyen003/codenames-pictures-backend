@@ -1,5 +1,3 @@
-
-// Class for room data structure
 export class RoomData {
 
     // Empty constructor for creating a new class
@@ -12,6 +10,7 @@ export class RoomData {
         this.gameGrid = data.gameGrid || null;
         this.gameStarted = data.gameStarted || false;
         this.currentTurn = data.currentTurn || null;
+        this.currentTurnData = data.currentTurnData || null;
         this.teamRedPoints = data.teamRedPoints || 0;
         this.teamBluePoints = data.teamBluePoints || 0;
     }
@@ -24,9 +23,10 @@ export class RoomData {
             teamRed: JSON.parse(serializedData.teamRed || '[]'),
             teamBlue: JSON.parse(serializedData.teamBlue || '[]'),
             spectators: JSON.parse(serializedData.spectators || '[]'),
-            gameGrid: serializedData.gameGrid ? JSON.parse(serializedData.gameGrid) : null,
+            gameGrid: serializedData.gameGrid === 'null' ? null : (serializedData.gameGrid ? JSON.parse(serializedData.gameGrid) : null),
             gameStarted: serializedData.gameStarted === 'true',
-            currentTurn: serializedData.currentTurn || null,
+            currentTurn: serializedData.currentTurn === 'null' ? null : serializedData.currentTurn,
+            currentTurnData: serializedData.currentTurnData === 'null' ? null : (serializedData.currentTurnData ? JSON.parse(serializedData.currentTurnData) : null),
             teamRedPoints: parseInt(serializedData.teamRedPoints || '0', 10),
             teamBluePoints: parseInt(serializedData.teamBluePoints || '0', 10)
         });
@@ -40,9 +40,10 @@ export class RoomData {
             teamRed: JSON.stringify(this.teamRed),
             teamBlue: JSON.stringify(this.teamBlue),
             spectators: JSON.stringify(this.spectators),
-            gameGrid: JSON.stringify(this.gameGrid),
+            gameGrid: this.gameGrid === null ? 'null' : JSON.stringify(this.gameGrid),
             gameStarted: this.gameStarted ? 'true' : 'false',
-            currentTurn: this.currentTurn,
+            currentTurn: this.currentTurn === null ? 'null' : this.currentTurn,
+            currentTurnData: this.currentTurnData === null ? 'null' : JSON.stringify(this.currentTurnData),
             teamRedPoints: this.teamRedPoints.toString(),
             teamBluePoints: this.teamBluePoints.toString()
         };
