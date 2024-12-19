@@ -11,8 +11,8 @@ export class RoomData {
         this.gameStarted = data.gameStarted || false;
         this.currentTurn = data.currentTurn || null;
         this.currentTurnData = data.currentTurnData || null;
-        this.teamRedPoints = data.teamRedPoints || 0;
-        this.teamBluePoints = data.teamBluePoints || 0;
+        this.teamRedPoints = data.teamRedPoints || null;
+        this.teamBluePoints = data.teamBluePoints || null;
     }
 
     // Deserialization
@@ -27,8 +27,8 @@ export class RoomData {
             gameStarted: serializedData.gameStarted === 'true',
             currentTurn: serializedData.currentTurn === 'null' ? null : serializedData.currentTurn,
             currentTurnData: serializedData.currentTurnData === 'null' ? null : (serializedData.currentTurnData ? JSON.parse(serializedData.currentTurnData) : null),
-            teamRedPoints: parseInt(serializedData.teamRedPoints || '0', 10),
-            teamBluePoints: parseInt(serializedData.teamBluePoints || '0', 10)
+            teamRedPoints: serializedData.teamRedPoints === 'null' ? null : serializedData.teamRedPoints,
+            teamBluePoints: serializedData.teamBluePoints === 'null' ? null : serializedData.teamBluePoints
         });
     }
 
@@ -44,8 +44,8 @@ export class RoomData {
             gameStarted: this.gameStarted ? 'true' : 'false',
             currentTurn: this.currentTurn === null ? 'null' : this.currentTurn,
             currentTurnData: this.currentTurnData === null ? 'null' : JSON.stringify(this.currentTurnData),
-            teamRedPoints: this.teamRedPoints.toString(),
-            teamBluePoints: this.teamBluePoints.toString()
+            teamRedPoints: this.teamRedPoints === null ? 'null' : this.teamRedPoints,
+            teamBluePoints: this.teamBluePoints === null ? 'null' : this.teamBluePoints
         };
     }
 

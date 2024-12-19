@@ -12,7 +12,7 @@ const socketEvents = (io, redisClient) => {
     const createOrUpdateRoom = async (roomName, roomData) => {
         const roomKey = getRoomKey(roomName);
         const serializedData = roomData.serialize();
-        console.log(serializedData);
+        // console.log(serializedData);
         await redisClient.hSet(roomKey, serializedData);
         await redisClient.expire(roomKey, 60 * 60 * 24 * 7); // Set expiration to 7 days
     };
@@ -82,6 +82,8 @@ const socketEvents = (io, redisClient) => {
                 await createOrUpdateRoom(roomName, room);
             }
 
+            console.log("Joining room: ", room);
+
             // Callback
             cb(room.gameLog, {
                 success: true,
@@ -91,7 +93,10 @@ const socketEvents = (io, redisClient) => {
                 teamBlue: room.teamBlue,
                 gameStarted: room.gameStarted,
                 gameGrid: room.gameStarted ? room.gameGrid : null,
-                currentTurn: room.currentTurn
+                currentTurn: room.currentTurn,
+                currentTurnData: room.currentTurnData ? room.currentTurnData : null,
+                teamRedPoints: room.teamRedPoints ? room.teamRedPoints : null,
+                teamBluePoints: room.teamBluePoints ? room.teamBluePoints : null
             });
 
             // Emitting back to all users in room
