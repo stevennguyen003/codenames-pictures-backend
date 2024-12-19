@@ -176,7 +176,6 @@ const socketEvents = (io, redisClient) => {
 
         // Starting a game
         socket.on("start game", async (roomName, cb) => {
-            // Error checking
             let room = await getRoomData(roomName);
             if (!room) return cb({ success: false, error: "Room does not exist" });
 
@@ -184,95 +183,82 @@ const socketEvents = (io, redisClient) => {
                 return cb({ success: false, error: "Each team must have at least 2 members" });
             }
 
-            // Set starting game details
+            // Initializing game info
             const { gameGrid, teamRedPoints, teamBluePoints } = generateGameGrid();
             room.gameStarted = true;
             room.gameGrid = gameGrid;
             room.teamRedPoints = teamRedPoints;
             room.teamBluePoints = teamBluePoints;
-            room.currentTurn = Math.random() < 0.5 ? 'red' : 'blue';
-            room.currentTurnData = null;
-            room.gameLog.push({ type: 'game_start', timestamp: new Date(), startingTeam: room.currentTurn });
 
-            // Attempt to update the room
+            // Initialize currentTurnData with starting team
+            const startingTeam = Math.random() < 0.5 ? 'red' : 'blue';
+            room.setCurrentTurn(startingTeam);
+
+            // Update game log
+            room.gameLog.push({ type: 'game_start', timestamp: new Date(), startingTeam });
+
+            // Update room with new info
             try {
                 await createOrUpdateRoom(roomName, room);
-
-                // Broadcast game start
                 io.to(roomName).emit("game started", {
                     success: true,
                     gameGrid: room.gameGrid,
-                    currentTurn: room.currentTurn,
+                    currentTurn: room.getCurrentTurn(),
                     teamRedPoints: room.teamRedPoints,
                     teamBluePoints: room.teamBluePoints
                 });
-    
+
                 cb({ success: true });
             } catch (error) {
                 console.error('Error updating room:', error);
-                cb({
-                    success: false,
-                    error: 'Failed to update room'
-                });
+                cb({ success: false, error: 'Failed to update room' });
             }
         });
 
         // Function to handle club submission from spymaster
         socket.on("submit clue", async (roomName, clue, clueNumber, cb) => {
-            console.log(`Gave clue ${clue} of ${clueNumber}`);
-
-            // Retrieve room data
             let room = await getRoomData(roomName);
+
+            // Verify arguments
             if (!room || !room.gameStarted) {
-                return cb({
-                    success: false,
-                    error: "Game not started or room does not exist"
-                });
+                return cb({ success: false, error: "Game not started or room does not exist" });
             }
-        
-            // Validate clue and number
             if (!clue || typeof clueNumber !== 'number' || clueNumber < 1) {
-                return cb({
-                    success: false,
-                    error: "Invalid clue or number"
-                });
+                return cb({ success: false, error: "Invalid clue or number" });
             }
-        
-            // Set current turn data
+
+            // Update current turn data with clue information
             room.currentTurnData = {
+                ...room.currentTurnData,
                 currentClue: clue,
                 clueNumber: clueNumber,
                 correctCardsClicked: 0,
                 turnEnded: false
             };
-        
-            // Add log entry for clue submission
+
+            // Update game log
             room.gameLog.push({
                 type: 'clue_submitted',
                 timestamp: new Date(),
                 clue: clue,
                 clueNumber: clueNumber,
-                team: room.currentTurn
+                team: room.getCurrentTurn()
             });
-        
+
+            // Update room with new info
             try {
                 await createOrUpdateRoom(roomName, room);
-        
-                // Broadcast clue submission to all room members
                 io.to(roomName).emit("clue submitted", {
                     clue,
                     clueNumber,
                     correctCardsClicked: 0,
                     turnEnded: false
                 });
-        
+
                 cb({ success: true });
             } catch (error) {
                 console.error('Error updating room:', error);
-                cb({
-                    success: false,
-                    error: 'Failed to submit clue'
-                });
+                cb({ success: false, error: 'Failed to submit clue' });
             }
         });
 
@@ -281,66 +267,52 @@ const socketEvents = (io, redisClient) => {
             // Retrieve room data
             let room = await getRoomData(roomName);
             if (!room || !room.gameStarted) {
-                return cb({
-                    success: false,
-                    error: "Game not started or room does not exist"
-                });
+                return cb({ success: false, error: "Game not started or room does not exist" });
             }
-
+        
             // Validate card index
             if (cardIndex < 0 || cardIndex >= room.gameGrid.length) {
-                return cb({
-                    success: false,
-                    error: "Invalid card index"
-                });
+                return cb({ success: false, error: "Invalid card index" });
             }
-
+        
             // Get the clicked card
             const clickedCard = room.gameGrid[cardIndex];
-            // Get the clue number
-            const clueNumber = room.currentTurnData.clueNumber;
-
+        
             // Prevent re-clicking revealed cards
             if (clickedCard.revealed) {
-                return cb({
-                    success: false,
-                    error: "Card already revealed"
-                });
+                return cb({ success: false, error: "Card already revealed" });
             }
-
+        
             // Initialize turn tracking if not exists
             if (!room.currentTurnData) {
-                room.currentTurnData = {
-                    currentClue: '',
-                    clueNumber: clueNum,
-                    correctCardsClicked: 0,
-                    turnEnded: false
-                };
+                room.setCurrentTurn(room.getCurrentTurn());
             }
-
+        
             // Mark card as revealed
             clickedCard.revealed = true;
-
+        
             // Game logic based on card type
             let gameOver = false;
             let winner = null;
             let turnEnded = false;
+            let currentTurn = room.getCurrentTurn();
+        
             let logEntry = {
                 type: 'card_click',
                 timestamp: new Date(),
                 cardWord: clickedCard.image,
                 cardType: clickedCard.type,
-                team: room.currentTurn
+                team: currentTurn
             };
-
+        
             // Determine if card click ends the turn
             let isCorrectColor = false;
             switch (clickedCard.type) {
                 case 'red':
-                    if (room.currentTurn === 'red') {
+                    if (currentTurn === 'red') {
                         isCorrectColor = true;
                         room.currentTurnData.correctCardsClicked++;
-
+        
                         // Win condition
                         if (room.teamRedPoints === 0) {
                             gameOver = true;
@@ -352,12 +324,12 @@ const socketEvents = (io, redisClient) => {
                     room.teamRedPoints--;
                     logEntry.pointsRemaining = room.teamRedPoints;
                     break;
-
+        
                 case 'blue':
-                    if (room.currentTurn === 'blue') {
+                    if (currentTurn === 'blue') {
                         isCorrectColor = true;
                         room.currentTurnData.correctCardsClicked++;
-
+        
                         // Win condition
                         if (room.teamBluePoints === 0) {
                             gameOver = true;
@@ -369,30 +341,28 @@ const socketEvents = (io, redisClient) => {
                     room.teamBluePoints--;
                     logEntry.pointsRemaining = room.teamBluePoints;
                     break;
-
+        
                 case 'assassin':
                     gameOver = true;
-                    winner = room.currentTurn === 'red' ? 'blue' : 'red';
+                    winner = currentTurn === 'red' ? 'blue' : 'red';
                     logEntry.type = 'assassin_clicked';
                     turnEnded = true;
                     break;
-
+        
                 case 'neutral':
                     turnEnded = true;
                     break;
             }
-
+        
             // Check if turn should end based on clue number or wrong card
-            if (turnEnded ||
-                (isCorrectColor &&
-                    room.currentTurnData.correctCardsClicked > room.currentTurnData.clueNumber)) {
+            if (turnEnded || (isCorrectColor && room.currentTurnData.correctCardsClicked > room.currentTurnData.clueNumber)) {
                 room.currentTurnData.turnEnded = true;
                 turnEnded = true;
             }
-
+        
             // Add log entry
             room.gameLog.push(logEntry);
-
+        
             // Handle game over scenario
             if (gameOver) {
                 room.gameStarted = false;
@@ -403,47 +373,45 @@ const socketEvents = (io, redisClient) => {
                     winner: winner
                 });
             }
-
+        
             // Switch turns if turn ended
             if (turnEnded && !gameOver) {
-                room.currentTurn = room.currentTurn === 'red' ? 'blue' : 'red';
-                // Reset turn data
-                //room.currentTurnData = null;
+                const nextTeam = currentTurn === 'red' ? 'blue' : 'red';
+                room.setCurrentTurn(nextTeam);
             }
-
+        
             try {
                 await createOrUpdateRoom(roomName, room);
-
+        
                 io.to(roomName).emit("card revealed", {
                     cardIndex,
                     cardType: clickedCard.type,
                     gameGrid: room.gameGrid,
                     teamRedPoints: room.teamRedPoints,
                     teamBluePoints: room.teamBluePoints,
-                    currentTurn: room.currentTurn,
+                    currentTurn: room.getCurrentTurn(),
                     turnEnded,
                     gameOver,
                     winner,
-                    correctCardsClicked: room.currentTurnData?.correctCardsClicked || 0,
-                    clueNumber: room.currentTurnData?.clueNumber || 0
+                    correctCardsClicked: room.currentTurnData.correctCardsClicked,
+                    clueNumber: room.currentTurnData.clueNumber
                 });
-
+        
                 cb({
                     success: true,
                     cardType: clickedCard.type,
                     turnEnded,
                     gameOver,
                     winner,
-                    correctCardsClicked: room.currentTurnData?.correctCardsClicked || 0
+                    correctCardsClicked: room.currentTurnData.correctCardsClicked
                 });
             } catch (error) {
                 console.error('Error updating room:', error);
-                cb({
-                    success: false,
-                    error: 'Failed to update room'
-                });
+                cb({ success: false, error: 'Failed to update room' });
             }
         });
+        
+
     });
 };
 

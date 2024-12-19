@@ -9,7 +9,6 @@ export class RoomData {
         this.spectators = data.spectators || [];
         this.gameGrid = data.gameGrid || null;
         this.gameStarted = data.gameStarted || false;
-        this.currentTurn = data.currentTurn || null;
         this.currentTurnData = data.currentTurnData || null;
         this.teamRedPoints = data.teamRedPoints || null;
         this.teamBluePoints = data.teamBluePoints || null;
@@ -25,7 +24,6 @@ export class RoomData {
             spectators: JSON.parse(serializedData.spectators || '[]'),
             gameGrid: serializedData.gameGrid === 'null' ? null : (serializedData.gameGrid ? JSON.parse(serializedData.gameGrid) : null),
             gameStarted: serializedData.gameStarted === 'true',
-            currentTurn: serializedData.currentTurn === 'null' ? null : serializedData.currentTurn,
             currentTurnData: serializedData.currentTurnData === 'null' ? null : (serializedData.currentTurnData ? JSON.parse(serializedData.currentTurnData) : null),
             teamRedPoints: serializedData.teamRedPoints === 'null' ? null : serializedData.teamRedPoints,
             teamBluePoints: serializedData.teamBluePoints === 'null' ? null : serializedData.teamBluePoints
@@ -42,7 +40,6 @@ export class RoomData {
             spectators: JSON.stringify(this.spectators),
             gameGrid: this.gameGrid === null ? 'null' : JSON.stringify(this.gameGrid),
             gameStarted: this.gameStarted ? 'true' : 'false',
-            currentTurn: this.currentTurn === null ? 'null' : this.currentTurn,
             currentTurnData: this.currentTurnData === null ? 'null' : JSON.stringify(this.currentTurnData),
             teamRedPoints: this.teamRedPoints === null ? 'null' : this.teamRedPoints,
             teamBluePoints: this.teamBluePoints === null ? 'null' : this.teamBluePoints
@@ -53,5 +50,21 @@ export class RoomData {
     getSpymaster(teamColor) {
         const team = teamColor === 'red' ? this.teamRed : this.teamBlue;
         return team.find(user => user.role === 'spymaster');
+    }
+
+    // Helper method to get current turn
+    getCurrentTurn() {
+        return this.currentTurnData?.team || null;
+    }
+
+    // Helper method to set current turn
+    setCurrentTurn(team, clue = null, clueNumber = null) {
+        this.currentTurnData = {
+            team,
+            currentClue: clue,
+            clueNumber: clueNumber,
+            correctCardsClicked: 0,
+            turnEnded: false
+        };
     }
 }
