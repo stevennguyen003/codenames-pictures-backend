@@ -82,7 +82,7 @@ const socketEvents = (io, redisClient) => {
                 await createOrUpdateRoom(roomName, room);
             }
 
-            console.log("Joining room: ", room);
+            // console.log("Joining room: ", room);
 
             // Callback
             cb(room.gameLog, {
@@ -193,6 +193,8 @@ const socketEvents = (io, redisClient) => {
             // Initialize currentTurnData with starting team
             const startingTeam = Math.random() < 0.5 ? 'red' : 'blue';
             room.setCurrentTurn(startingTeam);
+
+            console.log("Starting Game: ", room);
 
             // Update game log
             room.gameLog.push({ type: 'game_start', timestamp: new Date(), startingTeam });
@@ -378,6 +380,7 @@ const socketEvents = (io, redisClient) => {
             if (turnEnded && !gameOver) {
                 const nextTeam = currentTurn === 'red' ? 'blue' : 'red';
                 room.setCurrentTurn(nextTeam);
+                console.log("Current Turn: ", room.currentTurnData);
             }
         
             try {
