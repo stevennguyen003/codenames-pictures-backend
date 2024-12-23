@@ -217,6 +217,49 @@ const socketEvents = (io, redisClient) => {
             }
         });
 
+        socket.on("reset game", async (roomName, cb) => {
+            let room = await getRoomData(roomName);
+            if (!room) return cb({ success: false, error: "Room does not exist" });
+        
+            // Reset the game state
+            room.gameStarted = false;
+            room.gameGrid = null;
+            room.teamRedPoints = null;
+            room.teamBluePoints = null;
+            room.currentTurnData = null;
+            room.gameLog = []; // Clear the game log
+        
+            console.log("Resetting Game: ", room);
+        
+            // Add reset event to game log
+            room.gameLog.push({ 
+                type: 'game_reset', 
+                timestamp: new Date(), 
+            });
+        
+            // Update room with new info
+            try {
+                await createOrUpdateRoom(roomName, room);
+                
+                // Emit reset event with all necessary data
+                io.to(roomName).emit("reset game", {
+                    success: true,
+                    gameGrid: room.gameGrid,
+                    currentTurn: room.getCurrentTurn(),
+                    teamRedPoints: room.teamRedPoints,
+                    teamBluePoints: room.teamBluePoints,
+                    teamRed: room.teamRed,
+                    teamBlue: room.teamBlue,
+                    gameLog: room.gameLog
+                });
+        
+                cb({ success: true });
+            } catch (error) {
+                console.error('Error resetting room:', error);
+                cb({ success: false, error: 'Failed to reset room' });
+            }
+        });
+
         // Function to handle club submission from spymaster
         socket.on("submit clue", async (roomName, clue, clueNumber, cb) => {
             let room = await getRoomData(roomName);
