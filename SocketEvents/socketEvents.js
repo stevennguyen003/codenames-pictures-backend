@@ -93,7 +93,6 @@ const socketEvents = (io, redisClient) => {
                 teamBlue: room.teamBlue,
                 gameStarted: room.gameStarted,
                 gameGrid: room.gameStarted ? room.gameGrid : null,
-                currentTurn: room.currentTurn,
                 currentTurnData: room.currentTurnData ? room.currentTurnData : null,
                 teamRedPoints: room.teamRedPoints ? room.teamRedPoints : null,
                 teamBluePoints: room.teamBluePoints ? room.teamBluePoints : null
@@ -205,7 +204,7 @@ const socketEvents = (io, redisClient) => {
                 io.to(roomName).emit("game started", {
                     success: true,
                     gameGrid: room.gameGrid,
-                    currentTurn: room.getCurrentTurn(),
+                    currentTurnData: room.currentTurnData,
                     teamRedPoints: room.teamRedPoints,
                     teamBluePoints: room.teamBluePoints
                 });
@@ -281,6 +280,8 @@ const socketEvents = (io, redisClient) => {
                 turnEnded: false
             };
 
+            const team = room.getCurrentTurn();
+
             // Update game log
             room.gameLog.push({
                 type: 'clue_submitted',
@@ -290,14 +291,13 @@ const socketEvents = (io, redisClient) => {
                 team: room.getCurrentTurn()
             });
 
+            console.log("Clue Submitted: ", room);
+
             // Update room with new info
             try {
                 await createOrUpdateRoom(roomName, room);
                 io.to(roomName).emit("clue submitted", {
-                    clue,
-                    clueNumber,
-                    correctCardsClicked: 0,
-                    turnEnded: false
+                    currentTurnData: room.currentTurnData
                 });
 
                 cb({ success: true });
@@ -341,6 +341,8 @@ const socketEvents = (io, redisClient) => {
             let winner = null;
             let turnEnded = false;
             let currentTurn = room.getCurrentTurn();
+
+            console.log("Current Turn: ", currentTurn);
         
             let logEntry = {
                 type: 'card_click',
@@ -364,7 +366,7 @@ const socketEvents = (io, redisClient) => {
                             winner = 'red';
                         }
                     } else {
-                        turnEnded = true;
+                        room.currentTurnData.turnEnded = true;
                     }
                     room.teamRedPoints--;
                     logEntry.pointsRemaining = room.teamRedPoints;
@@ -381,7 +383,7 @@ const socketEvents = (io, redisClient) => {
                             winner = 'blue';
                         }
                     } else {
-                        turnEnded = true;
+                        room.currentTurnData.turnEnded = true;
                     }
                     room.teamBluePoints--;
                     logEntry.pointsRemaining = room.teamBluePoints;
@@ -391,18 +393,17 @@ const socketEvents = (io, redisClient) => {
                     gameOver = true;
                     winner = currentTurn === 'red' ? 'blue' : 'red';
                     logEntry.type = 'assassin_clicked';
-                    turnEnded = true;
+                    room.currentTurnData.turnEnded = true;
                     break;
         
                 case 'neutral':
-                    turnEnded = true;
+                    room.currentTurnData.turnEnded = true;
                     break;
             }
         
             // Check if turn should end based on clue number or wrong card
             if (turnEnded || (isCorrectColor && room.currentTurnData.correctCardsClicked > room.currentTurnData.clueNumber)) {
                 room.currentTurnData.turnEnded = true;
-                turnEnded = true;
             }
         
             // Add log entry
@@ -420,43 +421,54 @@ const socketEvents = (io, redisClient) => {
             }
         
             // Switch turns if turn ended
-            if (turnEnded && !gameOver) {
+            if (room.currentTurnData.turnEnded && !gameOver) {
                 const nextTeam = currentTurn === 'red' ? 'blue' : 'red';
                 room.setCurrentTurn(nextTeam);
-                console.log("Current Turn: ", room.currentTurnData);
             }
         
+            console.log("Card Clicked: ", room);
+
             try {
                 await createOrUpdateRoom(roomName, room);
         
+                // Updated emit with complete currentTurnData
                 io.to(roomName).emit("card revealed", {
                     cardIndex,
                     cardType: clickedCard.type,
                     gameGrid: room.gameGrid,
                     teamRedPoints: room.teamRedPoints,
                     teamBluePoints: room.teamBluePoints,
-                    currentTurn: room.getCurrentTurn(),
-                    turnEnded,
+                    currentTurnData: {
+                        team: room.currentTurnData.currentTurn,
+                        currentClue: room.currentTurnData.currentClue,
+                        clueNumber: room.currentTurnData.clueNumber,
+                        correctCardsClicked: room.currentTurnData.correctCardsClicked,
+                        turnEnded: room.currentTurnData.turnEnded
+                    },
                     gameOver,
-                    winner,
-                    correctCardsClicked: room.currentTurnData.correctCardsClicked,
-                    clueNumber: room.currentTurnData.clueNumber
+                    winner
                 });
         
+                // Updated callback with currentTurnData
                 cb({
                     success: true,
                     cardType: clickedCard.type,
                     turnEnded,
                     gameOver,
                     winner,
-                    correctCardsClicked: room.currentTurnData.correctCardsClicked
+                    currentTurnData: {
+                        team: room.currentTurnData.currentTurn,
+                        currentClue: room.currentTurnData.currentClue,
+                        clueNumber: room.currentTurnData.clueNumber,
+                        correctCardsClicked: room.currentTurnData.correctCardsClicked,
+                        turnEnded: room.currentTurnData.turnEnded
+                    }
                 });
             } catch (error) {
                 console.error('Error updating room:', error);
                 cb({ success: false, error: 'Failed to update room' });
             }
-        });
-        
+        });   
 
     });
 };

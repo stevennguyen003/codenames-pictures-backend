@@ -54,13 +54,13 @@ export class RoomData {
 
     // Helper method to get current turn
     getCurrentTurn() {
-        return this.currentTurnData?.team || null;
+        return this.currentTurnData?.currentTurn || null;
     }
 
     // Helper method to set current turn
     setCurrentTurn(team, clue = null, clueNumber = null) {
         this.currentTurnData = {
-            team,
+            currentTurn: team,
             currentClue: clue,
             clueNumber: clueNumber,
             correctCardsClicked: 0,
