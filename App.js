@@ -29,7 +29,7 @@ const redisStore = new RedisStore({
 // Middleware Setup
 app.use(cors({
   credentials: true,
-  origin: ["http://localhost:3000"]
+  origin: [process.env.FRONTEND_URL || "http://localhost:3000"]
 }));
 
 // Session Middleware
@@ -39,7 +39,7 @@ app.use(session({
   resave: false,
   saveUninitialized: false,
   cookie: {
-    secure: process.env.NODE_ENV === 'production',
+    secure: process.env.NODE_ENV === 'development',
     httpOnly: true,
     maxAge: 1000 * 60 * 60 * 24 * 7 // 1 week
   }
@@ -51,7 +51,7 @@ const server = app.listen(port);
 // Socket.IO Setup
 const io = new SocketIOServer(server, {
   cors: {
-    origin: "http://localhost:3000",
+    origin: [process.env.FRONTEND_URL || "http://localhost:3000"],
     methods: ["GET", "POST"],
     credentials: true
   }
