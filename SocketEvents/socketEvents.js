@@ -362,7 +362,7 @@ const socketEvents = (io, redisClient) => {
                     } else {
                         room.currentTurnData.turnEnded = true;
                     }
-                    
+
                     // Win condition
                     if (room.teamRedPoints === 0) {
                         gameOver = true;
@@ -439,6 +439,7 @@ const socketEvents = (io, redisClient) => {
                     gameGrid: room.gameGrid,
                     teamRedPoints: room.teamRedPoints,
                     teamBluePoints: room.teamBluePoints,
+                    gameStarted: room.gameStarted,
                     currentTurnData: {
                         team: room.currentTurnData.currentTurn,
                         currentClue: room.currentTurnData.currentClue,
