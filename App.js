@@ -12,8 +12,10 @@ const port = process.env.PORT || 4000;
 
 // Redis Client
 const redisClient = createClient({
-  url: process.env.REDIS_URL || 'redis://localhost:6379'
+  url: process.env.REDIS_URL
 });
+
+console.log('Connecting to Redis at:', process.env.REDIS_URL);
 
 redisClient.on('error', (err) => console.log('Redis Client Error', err));
 
@@ -29,7 +31,7 @@ const redisStore = new RedisStore({
 // Middleware Setup
 app.use(cors({
   credentials: true,
-  origin: [process.env.FRONTEND_URL || "http://localhost:3000"]
+  origin: process.env.FRONTEND_URL
 }));
 
 // Session Middleware
@@ -39,7 +41,7 @@ app.use(session({
   resave: false,
   saveUninitialized: false,
   cookie: {
-    secure: process.env.NODE_ENV === 'development',
+    secure: process.env.NODE_ENV === 'production',
     httpOnly: true,
     maxAge: 1000 * 60 * 60 * 24 * 7 // 1 week
   }
@@ -51,7 +53,7 @@ const server = app.listen(port);
 // Socket.IO Setup
 const io = new SocketIOServer(server, {
   cors: {
-    origin: [process.env.FRONTEND_URL || "http://localhost:3000"],
+    origin: process.env.FRONTEND_URL,
     methods: ["GET", "POST"],
     credentials: true
   }

@@ -441,7 +441,7 @@ const socketEvents = (io, redisClient) => {
                     teamBluePoints: room.teamBluePoints,
                     gameStarted: room.gameStarted,
                     currentTurnData: {
-                        team: room.currentTurnData.currentTurn,
+                        currentTurn: room.currentTurnData.currentTurn,
                         currentClue: room.currentTurnData.currentClue,
                         clueNumber: room.currentTurnData.clueNumber,
                         correctCardsClicked: room.currentTurnData.correctCardsClicked,
